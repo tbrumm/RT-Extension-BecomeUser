@@ -89,3 +89,14 @@ The extension registers a new right:
 
 Users with the `SuperUser` right can also use this feature. SuperUsers themselves can never be impersonated.
 
+---
+
+## License
+
+This software is free software; you can redistribute it and/or modify it under the terms of the **GNU General Public License, version 2** (GPL-2.0).
+
+## Authors
+
+- **Matthias Bloch** &lt;matthias.bloch@puffin.ch&gt; — original implementation
+- **Misy1337** — updates and improvements
+- **Torsten Brumm** — RT 6 port
