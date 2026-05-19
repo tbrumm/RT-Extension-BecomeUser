@@ -6,6 +6,5 @@ $User => undef
 </%args>
 
 <&| /Widgets/TitleBox, title => loc('Become User'), class => 'user-info-become-user' &>
-<a href="<% RT->Config->Get('WebPath') %>/BecomeUser.html?id=<% $User->id %>">Become this user</a>
+<a href="<% RT->Config->Get('WebPath') %>/BecomeUser.html?id=<% $User->id %>" class="btn btn-warning btn-sm">Become this user</a>
 </&>
-

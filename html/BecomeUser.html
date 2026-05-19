@@ -1,32 +1,62 @@
 <%INIT>
-
-if ( $session{CurrentUser}->HasRight(
-        Right => 'SuperUser', Object => $RT::System)
-            or 
-      $session{CurrentUser}->HasRight(
-          Right => 'BecomeUser', Object => $RT::System
-      )
-){
-    # refuse to become super users 
-    my $u = RT::CurrentUser->new(RT->SystemUser);
-    $u->Load($id);
-    if ($u->HasRight(Right => 'SuperUser', Object => $RT::System)){
-        $m->out("<h1>Error</h1>Cannot become a super user");
-    }
-    else {
-        $session{RT_Extension_BecomeUser_OriginalUser} = $session{CurrentUser};
-        $session{RT_Extension_BecomeUser_NewUser} = $session{CurrentUser} = $u;
-        $session{CurrentUser}->_BuildTableAttributes;
-
-        $m->out("<h1>you are now user ".$session{CurrentUser}->Name." (id: $id )</h1>");
-    }
+my $can_become = RT::Extension::BecomeUser::userHasAppropriateRight($session{CurrentUser});
+unless ($can_become) {
+    $m->comp('/Elements/Header', Title => loc('Become User'));
+    $m->out('<div class="alert alert-danger mt-3"><strong>' . loc('Error') . ':</strong> ' . loc('You don\'t have the right to become other users.') . '</div>');
+    $m->out('<a href="' . RT->Config->Get('WebPath') . '/" class="btn btn-secondary mt-2">' . loc('Back to Homepage') . '</a>');
+    $m->comp('/Elements/Footer');
+    return;
 }
-else{
-    $m->out("<h1>Error</h1><p>you don't have the right to become other users</p>");
+
+unless ($id) {
+    $m->comp('/Elements/Header', Title => loc('Become User'));
+    $m->out('<div class="alert alert-danger mt-3"><strong>' . loc('Error') . ':</strong> ' . loc('No user ID specified.') . '</div>');
+    $m->comp('/Elements/Footer');
+    return;
+}
+
+my $u = RT::CurrentUser->new(RT->SystemUser);
+$u->Load($id);
+unless ($u->id) {
+    $m->comp('/Elements/Header', Title => loc('Become User'));
+    $m->out('<div class="alert alert-danger mt-3"><strong>' . loc('Error') . ':</strong> ' . loc('User not found.') . '</div>');
+    $m->comp('/Elements/Footer');
+    return;
+}
+
+if ($u->HasRight(Right => 'SuperUser', Object => $RT::System)) {
+    $m->comp('/Elements/Header', Title => loc('Become User'));
+    $m->out('<div class="alert alert-danger mt-3"><strong>' . loc('Error') . ':</strong> ' . loc('Cannot become a SuperUser.') . '</div>');
+    $m->out('<a href="' . RT->Config->Get('WebPath') . '/" class="btn btn-secondary mt-2">' . loc('Back to Homepage') . '</a>');
+    $m->comp('/Elements/Footer');
+    return;
+}
+
+RT::Interface::Web::Session::Set(
+    Key   => 'RT_Extension_BecomeUser_OriginalUser',
+    Value => $session{CurrentUser},
+);
+RT::Interface::Web::Session::Set(
+    Key   => 'RT_Extension_BecomeUser_NewUser',
+    Value => $u,
+);
+RT::Interface::Web::Session::Set(
+    Key   => 'CurrentUser',
+    Value => $u,
+);
+
+# Force a full browser navigation so the nav bar re-renders with the new user context.
+# RT's default Redirect() uses HX-Location (partial swap) for HTMX requests,
+# which only replaces .main-container and leaves the nav showing the old user.
+my $url = RT->Config->Get('WebURL');
+if ( RT::Interface::Web::RequestENV('HTTP_HX_REQUEST') ) {
+    $r->status(200);
+    $r->headers_out->{'HX-Redirect'} = $url;
+    $m->abort;
+} else {
+    RT::Interface::Web::Redirect($url);
 }
 </%INIT>
-
-<a href="/">home</a>
 
 <%ARGS>
 $id => undef

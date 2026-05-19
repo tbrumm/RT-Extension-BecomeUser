@@ -1,0 +1,53 @@
+%if ($session{RT_Extension_BecomeUser_OriginalUser}){
+<style>
+#rt-become-user-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 99999;
+    text-align: center;
+    background: var(--bs-warning);
+    color: var(--bs-dark);
+    padding: 6px 12px;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,.3);
+}
+#rt-become-user-banner a {
+    color: var(--bs-dark);
+    text-decoration: underline;
+}
+</style>
+<script>
+(function() {
+    var webPath = '<% RT->Config->Get('WebPath') |n %>';
+
+    function applyLayout() {
+        var banner = document.getElementById('rt-become-user-banner');
+        if (!banner) return;
+        var h = banner.offsetHeight;
+        document.body.style.paddingTop = h + 'px';
+        // #main-navigation is position:absolute; top:5px relative to viewport.
+        // Push it below the banner.
+        var nav = document.getElementById('main-navigation');
+        if (nav) nav.style.top = (h + 5) + 'px';
+    }
+
+    function addBanner() {
+        if (document.getElementById('rt-become-user-banner')) return;
+        var banner = document.createElement('div');
+        banner.id = 'rt-become-user-banner';
+        banner.innerHTML = '&#9888; You are impersonating another user. '
+            + '<a href="' + webPath + '/BecomeOriginalUser.html">Back to original account</a>';
+        document.body.insertBefore(banner, document.body.firstChild);
+        applyLayout();
+    }
+
+    document.addEventListener('DOMContentLoaded', addBanner);
+    document.addEventListener('htmx:afterSwap', addBanner);
+    document.addEventListener('htmx:historyRestore', function() {
+        applyLayout();
+    });
+})();
+</script>
+%}

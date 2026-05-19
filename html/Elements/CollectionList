@@ -2,7 +2,7 @@
 %#
 %# COPYRIGHT:
 %#
-%# This software is Copyright (c) 1996-2022 Best Practical Solutions, LLC
+%# This software is Copyright (c) 1996-2025 Best Practical Solutions, LLC
 %#                                          <sales@bestpractical.com>
 %#
 %# (Except where explicitly superseded by other copyright notices)
@@ -49,16 +49,8 @@
 if (!$Collection) {
     $Collection = $Class->new( $session{'CurrentUser'} );
     if ( $Class eq 'RT::Transactions' ) {
-        my @limits = ( "ObjectType = '$ObjectType'", $Query ? "($Query)" : () );
-        if ( $ObjectType eq 'RT::Ticket' ) {
-            unshift @limits, "TicketType = 'ticket'";
-        }
-        $Query = join ' AND ', @limits;
+        $Query = PreprocessTransactionSearchQuery( Query => $Query, ObjectType => $ObjectType );
     }
-    $Collection->FromSQL($Query);
-}
-elsif (!$Collection && $Class eq 'RT::Assets') {
-    $Collection = RT::Assets->new( $session{'CurrentUser'} );
     $Collection->FromSQL($Query);
 }
 
@@ -66,23 +58,10 @@ elsif (!$Collection && $Class eq 'RT::Assets') {
 # dashboard mail can be suppressed if there are no results
 $$HasResults = 0 if $HasResults && !defined($$HasResults);
 
-$TotalFound = $Collection->CountAll() unless defined $TotalFound;
-return '' if !$TotalFound && !$ShowEmpty;
-
-if ( $Rows ) {
-    if ( $TotalFound <= $Rows ) {
-        $Page = 1;
-    }
-    else {
-        my $MaxPage = int( $TotalFound / $Rows ) + ( $TotalFound % $Rows ? 1 : 0 );
-        $Page = $MaxPage if $Page > $MaxPage;
-    }
-}
-
 # XXX: ->{'order_by'} is hacky, but there is no way to check if
 # collection is ordered or not
 if ( @OrderBy && ($AllowSorting || $PreferOrderBy || !$Collection->{'order_by'}) ) {
-    if ( $OrderBy[0] =~ /\|/ ) {
+    if ( $OrderBy[0] =~ /\|/ || ( $Order[0] // '' ) =~ /\|/ ) {
         @OrderBy = split /\|/, $OrderBy[0];
         @Order = split /\|/,$Order[0];
     }
@@ -97,20 +76,37 @@ $Collection->RowsPerPage( $Rows ) if $Rows;
 $Page = 1 unless $Page && $Page > 0;    # workaround problems with $Page = '' or undef
 $Collection->GotoPage( $Page - 1 ); # SB uses page 0 as the first page
 
-# DisplayFormat lets us use a "temporary" format for display, while 
+# $Collection might not have CombineSearchAndCount method, like dashboards and saved searches.
+# Don't combine search and count for unpaginated searches, as we will progressively generate the result.
+$Collection->CombineSearchAndCount(1) if $Rows && $Collection->can('CombineSearchAndCount');
+$TotalFound = $Collection->CountAll() unless defined $TotalFound;
+return '' if !$TotalFound && !$ShowEmpty;
+
+# Adjust page after CountAll, otherwise $TotalFound could be not defined.
+# On the other hand, CountAll needs page info if it's a combined search,
+# thus we have to set page first and then adjust it here.
+if ( $Rows ) {
+    if ( $TotalFound <= $Rows ) {
+        $Page = 1;
+    }
+    else {
+        my $MaxPage = int( $TotalFound / $Rows ) + ( $TotalFound % $Rows ? 1 : 0 );
+        $Page = $MaxPage if $Page > $MaxPage;
+    }
+}
+$Collection->GotoPage( $Page - 1 );
+
+# DisplayFormat lets us use a "temporary" format for display, while
 # still using our original format for next/prev page links.
 # bulk update uses this feature to add checkboxes
 
 $DisplayFormat ||= $Format;
 
 # Scrub the html of the format string to remove any potential nasties.
-$Format = $m->comp('/Elements/ScrubHTML', Content => $Format);
-$DisplayFormat = $m->comp('/Elements/ScrubHTML', Content => $DisplayFormat);
+$Format = $m->comp('/Elements/ScrubHTML', Content => $Format, SkipStructureCheck => 1, Restrictive => 1);
+$DisplayFormat = $m->comp('/Elements/ScrubHTML', Content => $DisplayFormat, SkipStructureCheck => 1, Restrictive => 1);
 
 my @Format = $m->comp('/Elements/CollectionAsTable/ParseFormat', Format => $DisplayFormat);
-
-# Find the maximum number of items in any row, so we can pad the table.
-my ($maxitems, $item) = (0, 0);
 
 $m->callback(
     CallbackName => 'AddColumns',
@@ -118,7 +114,8 @@ $m->callback(
     Collection   => $Collection,
 );
 
-
+# Find the maximum number of items in any row, so we can pad the table.
+my ($maxitems, $item) = (0, 0);
 foreach my $col (@Format) {
     $item++;
     if ( $col->{title} && ($col->{title} eq 'NEWLINE') ) {
@@ -131,11 +128,12 @@ foreach my $col (@Format) {
 
 $Class ||= $Collection->ColumnMapClassName;
 
-$InlineEdit = 0 unless $Collection->isa('RT::Tickets');
+$InlineEdit = 0
+    unless $session{CurrentUser}->Privileged && ( $Collection->isa('RT::Tickets') || $Collection->isa('RT::Assets') );
 
 $m->out('<div class="table-responsive">');
 $m->out('<table cellspacing="0"');
-$m->out(' class="table ' .  ($Collection->isa('RT::Tickets') ? 'ticket-list' : 'collection') . ($InlineEdit ? ' inline-edit' : '') . ' collection-as-table"');
+$m->out(' class="table ' . RT->Config->Get('TableAccent') . ' ' . ($Collection->isa('RT::Tickets') ? 'ticket-list' : 'collection') . ($InlineEdit ? ' inline-edit' : '') . ' collection-as-table"');
 $m->out(' data-display-format="' . $m->interp->apply_escapes($DisplayFormat, 'h') . '"');
 $m->out(' data-max-items="' . $maxitems . '"');
 $m->out(' data-class="' . $Collection->RecordClass . '"');
@@ -166,7 +164,12 @@ if ( $ShowHeader ) {
 }
 
 my ($i, $column_map) = (0, {});
-while ( my $record = $Collection->Next ) {
+$m->out('<tbody>');
+if ( !$Rows ) {
+    $Collection->RowsPerPage(100);
+}
+
+while ( my $record = $Rows ? $Collection->Next : ( $Collection->Next || ( $Collection->NextPage && $Collection->Next ) ) ) {
     # Every ten rows, flush the buffer and put something on the page.
     $m->flush_buffer unless ++$i % 10;
 
@@ -195,7 +198,7 @@ while ( my $record = $Collection->Next ) {
 
     $$HasResults++ if $HasResults;
 }
-
+$m->out('</tbody>');
 $m->out('</table>');
 $m->out('</div>');
 if ( $Rows && $ShowNavigation && $TotalFound > $Rows ) {
@@ -213,7 +216,11 @@ if ( $Rows && $ShowNavigation && $TotalFound > $Rows ) {
         CurrentPage => $Page,
         Pages       => $pages,
         PageParam   => $PageParam,
-        URLParams   => \%query_args
+        URLParams   => \%query_args,
+        ShowJumpToPage => $ShowJumpToPage,
+        UseHtmx     => $UseHtmx,
+        HtmxTarget  => $HtmxTarget,
+        $HtmxSwap ? (HtmxSwap => $HtmxSwap) : (),
     );
 
 }
@@ -245,4 +252,8 @@ $InlineEdit     => RT->Config->Get('InlineEdit', $session{CurrentUser})
 $Query => 0
 $HasResults     => undef
 $ObjectType     => $Class eq 'RT::Transactions' ? 'RT::Ticket' : ''
+$ShowJumpToPage => 0
+$UseHtmx        => 0
+$HtmxTarget     => undef
+$HtmxSwap       => undef
 </%ARGS>

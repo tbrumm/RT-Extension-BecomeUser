@@ -1,16 +1,24 @@
 <%INIT>
+if (exists $session{RT_Extension_BecomeUser_OriginalUser}) {
+    RT::Interface::Web::Session::Set(
+        Key   => 'CurrentUser',
+        Value => $session{RT_Extension_BecomeUser_OriginalUser},
+    );
+    RT::Interface::Web::Session::Delete(
+        Key   => 'RT_Extension_BecomeUser_OriginalUser',
+    );
+    RT::Interface::Web::Session::Delete(
+        Key   => 'RT_Extension_BecomeUser_NewUser',
+    );
+}
 
-if (exists $session{RT_Extension_BecomeUser_OriginalUser}){
-    $session{CurrentUser} = $session{RT_Extension_BecomeUser_OriginalUser};
-    undef $session{RT_Extension_BecomeUser_OriginalUser};
-    undef $session{RT_Extension_BecomeUser_NewUser};
+# Force a full browser navigation so the nav bar re-renders with the restored user context.
+my $url = RT->Config->Get('WebURL');
+if ( RT::Interface::Web::RequestENV('HTTP_HX_REQUEST') ) {
+    $r->status(200);
+    $r->headers_out->{'HX-Redirect'} = $url;
+    $m->abort;
+} else {
+    RT::Interface::Web::Redirect($url);
 }
 </%INIT>
-<h1>you are now back at your original account with id <%$session{CurrentUser}->id %></h1>
-
-<a href="/">home</a>
-
-<%ARGS>
-$id => undef
-</%ARGS>
-
