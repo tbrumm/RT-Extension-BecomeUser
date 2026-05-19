@@ -1,66 +1,100 @@
-# RT-Extension-BecomeUser - Become another user
+# RT-Extension-BecomeUser
 
-## DESCRIPTION
+Impersonate any non-SuperUser directly from the RT admin interface — useful for support and debugging. A persistent warning banner reminds you that you are acting as another user, and one click brings you back to your own account.
 
-Extra functionality to become another user. This is reserved for 
-people with "SuperUser" or the newly introduced "BecomeUser" right.
+---
 
-Users cannot become SuperUsers.
+## Screenshots
 
-This module adds a column to the user table in Admin->Users called "become user".
-Clicking on the "become" link leads to an ugly page from where you can go to the homepage of the target user.
+**Warning banner and navigation while impersonating**
 
-The title bar in a "sudo session" is overwritten with "back to original account". This serves as a reminder of being a different user and clicking on it leads back to the original account.
+![Warning banner](doc/BannerWithWarning.png)
 
-Do not become yet another user after having impersonated a different user..
+**"Become User" button on the user admin page**
 
-Use this module with care, you really are the other user. Also, be careful with granting the "BecomeUser" right. E.g. granted to an otherwise unprivileged user, it enables this user to become any arbitrarily privileged user (unless SuperUsers).
+![Become User button on user page](doc/BecomeUser-UserPrefsPage.png)
 
-## IMPROVEMENTS
+---
 
-This module is ugly on purpose in the hope to avoid inadvertent manipulations.
-The code is rather straighforward and simple.
+## Features
 
-It should be easy to make it beautiful if that is what you need.
-If you do so, please get back with me before submitting a pull request. It might be better to start a new module like "BecomeUserBeautiful" or "BecomeUserUnobtrusive", in which case you are invited to use this module as a starting point.
+- **One-click impersonation** from Admin → Users → (select user) or from the User Summary page
+- **Persistent warning banner** fixed at the top of every page, with a direct link back to your original account
+- **Safe by design** — SuperUsers can never be impersonated
+- **Granular access control** via the dedicated `BecomeUser` right (no SuperUser required)
+- **Full RT 6 compatibility** — HTMX navigation, Bootstrap 5 styling, DB-backed session persistence
 
-## INSTALLATION
+---
 
-### Manual Installation
+## Requirements
 
-    cd (root dir of your rt install)
-    cd local/
-    mkdir -p RT-Extension-BecomeUser
-    cd RT-Extension-BecomeUser
+| Requirement | Version |
+|---|---|
+| Request Tracker | 6.0.0 – 6.x |
+| Perl | 5.10+ |
 
-unzip the tar, here
+---
 
-Make sure the module gets loaded by including 
+## Installation
 
-    Plugin('RT::Extension::BecomeUser');
+```bash
+perl Makefile.PL
+make
+sudo make install
+```
 
-into your etc/RT_SiteConfig.pm or a file in etc/RT_SiteConfig.d/
+Then enable the plugin in your RT configuration (`etc/RT_SiteConfig.pm` or a file in `etc/RT_SiteConfig.d/`):
 
-### Automated Install
+```perl
+Plugin('RT::Extension::BecomeUser');
+```
 
-    perl Makefile.PL
+After installation, clear the Mason cache and restart your web server:
 
-    make
+```bash
+sudo rm -rf /opt/rt6/var/mason_data/obj
+sudo systemctl restart apache2
+```
 
-    make install
+---
 
-Pull requests welcome!
+## Configuration
 
-## COPYRIGHT
+No additional configuration is required. After enabling the plugin, grant the `BecomeUser` right to the users or groups who should be allowed to impersonate others:
 
-Copyright (c) 2018 by Matthias Bloch. All rights reserved.
+**Admin → Global → Group Rights → (select group) → System → Become other users**
 
-## LICENSE
+> **Security note:** The `BecomeUser` right allows the holder to impersonate *any* non-SuperUser. Grant it only to trusted administrators.
 
-This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+---
 
-## AUTHOR
+## Usage
 
-Matthias Bloch <matthias.bloch@puffin.ch>
+1. Navigate to **Admin → Users** and open any non-SuperUser.
+2. Scroll to the **Become User** section at the bottom of the page and click **Become this user**.
+3. You are now acting as that user. The yellow warning banner at the top of every page reminds you of the active impersonation.
+4. Click **Back to original account** in the banner to return to your own session.
 
-=cut
+Alternatively, the **Become User** button also appears on the **User Summary** page.
+
+---
+
+## Access Control
+
+The extension registers a new right:
+
+| Right | Description |
+|---|---|
+| `BecomeUser` | Allows impersonating any non-SuperUser |
+
+Users with the `SuperUser` right can also use this feature. SuperUsers themselves can never be impersonated.
+
+---
+
+## Copyright and License
+
+Original module copyright © 2018 Matthias Bloch &lt;matthias.bloch@puffin.ch&gt;
+
+RT 6 port copyright © 2026 Torsten Brumm
+
+This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself (GPL v2).
