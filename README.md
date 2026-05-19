@@ -89,12 +89,3 @@ The extension registers a new right:
 
 Users with the `SuperUser` right can also use this feature. SuperUsers themselves can never be impersonated.
 
----
-
-## Copyright and License
-
-Original module copyright © 2018 Matthias Bloch &lt;matthias.bloch@puffin.ch&gt;
-
-RT 6 port copyright © 2026 Torsten Brumm
-
-This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself (GPL v2).
